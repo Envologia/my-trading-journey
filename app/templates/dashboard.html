@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Journal Bot - Dashboard</title>
+    <link href="https://cdn.replit.com/agent/bootstrap-agent-dark-theme.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            background-color: var(--bs-dark);
+            color: var(--bs-light);
+        }
+        .gradient-text {
+            background: linear-gradient(45deg, #00c6ff, #0072ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            display: inline-block;
+            font-weight: bold;
+        }
+        .card {
+            border-radius: 1rem;
+            background-color: var(--bs-dark-bg-subtle);
+            border: 1px solid var(--bs-border-color);
+            margin-bottom: 1.5rem;
+        }
+        .stat-card {
+            text-align: center;
+            padding: 1.5rem;
+        }
+        .stat-number {
+            font-size: 3rem;
+            font-weight: bold;
+            color: var(--bs-info);
+        }
+        .nav-pills .nav-link.active {
+            background-color: var(--bs-info);
+        }
+        .table {
+            color: var(--bs-light);
+        }
+    </style>
+</head>
+<body data-bs-theme="dark">
+    <div class="container">
+        <header class="d-flex justify-content-between align-items-center mb-4">
+            <h1><span class="gradient-text">Trading Journal Bot</span> Dashboard</h1>
+            <a href="/" class="btn btn-outline-light">Back to Home</a>
+        </header>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card stat-card">
+                    <div class="stat-number">{{ total_users }}</div>
+                    <h3>Total Users</h3>
+                    <p class="text-muted">Total number of users who have interacted with the bot</p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card stat-card">
+                    <div class="stat-number">{{ registered_users }}</div>
+                    <h3>Registered Users</h3>
+                    <p class="text-muted">Users who have completed registration</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card p-4">
+            <h2><i class="bi bi-people"></i> Recent Users</h2>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Experience Level</th>
+                            <th>Account Type</th>
+                            <th>Registration Status</th>
+                            <th>Join Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in recent_users %}
+                        <tr>
+                            <td>{{ user.full_name or 'Anonymous' }}</td>
+                            <td>{{ user.experience_level or 'N/A' }}</td>
+                            <td>{{ user.account_type or 'N/A' }}</td>
+                            <td>
+                                {% if user.registration_complete %}
+                                <span class="badge bg-success">Complete</span>
+                                {% else %}
+                                <span class="badge bg-warning">Incomplete</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ user.created_at.strftime('%Y-%m-%d') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card p-4">
+            <h2><i class="bi bi-broadcast"></i> Broadcast Message</h2>
+            <p>Use the Telegram bot command <code>/broadcast</code> to send a message to all registered users.</p>
+            <ol>
+                <li>Start the command with <code>/broadcast</code></li>
+                <li>Type your message when prompted</li>
+                <li>Preview your message and confirm sending</li>
+            </ol>
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> The broadcast feature is available only in the Telegram bot interface.
+            </div>
+        </div>
+        
+        <footer class="mt-5 text-center">
+            <p class="text-muted">© 2025 Trading Journal Bot. All rights reserved.</p>
+            <p class="text-muted">Dashboard last updated: {{ now().strftime('%Y-%m-%d %H:%M:%S UTC') }}</p>
+        </footer>
+    </div>
+</body>
+</html>

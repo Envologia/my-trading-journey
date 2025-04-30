@@ -4,6 +4,7 @@ Command handlers for the Telegram bot
 """
 import json
 import logging
+import os
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -11,7 +12,7 @@ from telegram.ext import ContextTypes
 from app import db
 from models import User, Trade, TherapySession, WeeklyReport, UserState
 from states import (
-    REGISTRATION_STATES, JOURNAL_STATES, THERAPY_STATES,
+    REGISTRATION_STATES, JOURNAL_STATES, THERAPY_STATES, BROADCAST_STATES,
     get_user_state, set_user_state, clear_user_state
 )
 import ai_therapy
@@ -47,23 +48,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     
     if user.registration_complete:
-        # Welcome back a registered user
+        # Welcome back a registered user with more emojis and engaging language
         await update.message.reply_text(
-            f"Welcome back {user.full_name}! How can I help you today?\n\n"
-            f"Use /journal to log a new trade\n"
-            f"Use /stats to see your trading statistics\n"
-            f"Use /therapy to talk about trading psychology\n"
-            f"Use /summary to get an AI analysis of your trading patterns\n"
-            f"Use /report to generate a weekly report\n"
-            f"Use /help to see available commands"
+            f"🎉 Welcome back, {user.full_name}! 🎉\n\n"
+            f"Ready to crush some more trades today? Here's what I can help you with:\n\n"
+            f"📝 /journal - Log your latest trading victory (or lesson!)\n"
+            f"📊 /stats - Check your awesome trading performance\n"
+            f"🧠 /therapy - Need a trading psychology boost?\n"
+            f"🔍 /summary - Get AI-powered insights on your trading style\n"
+            f"📈 /trades - Browse your trading journey\n"
+            f"📰 /report - See your weekly progress report\n"
+            f"❓ /help - Discover all my cool features\n\n"
+            f"What's your trading mission today? I'm here to make it happen! 💪"
         )
     else:
-        # Start registration process
+        # Start registration process with more personality
         await update.message.reply_text(
-            f"Hello {update.effective_user.first_name}! Welcome to Trading Journal Bot.\n\n"
-            f"I'm here to help you track your trades, analyze your performance, "
-            f"and provide support for the psychological aspects of trading.\n\n"
-            f"Let's start by setting up your profile. What is your full name?"
+            f"👋 Hello {update.effective_user.first_name}! Super excited to meet you! ✨\n\n"
+            f"I'm your new Trading Journal Bot - your personal trading companion, performance analyst, "
+            f"and mindset coach all rolled into one awesome package! 🚀\n\n"
+            f"Let's get your trading journey supercharged! 💯 First things first - what's your full name? "
+            f"(This helps me personalize your experience!)"
         )
         
         # Set user state to collect full name
@@ -81,9 +86,11 @@ async def therapy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     
     await update.message.reply_text(
-        "Welcome to your trading psychology session. "
-        "How are you feeling about your trading today? "
-        "Feel free to share any thoughts, concerns, or emotions."
+        "🧘‍♂️ *Welcome to your Trading Mindset Therapy* 🧠\n\n"
+        "Trading is as much about psychology as it is about strategy! 💭\n\n"
+        "How's your trading mindset today? Feeling confident? Stressed? Uncertain? "
+        "I'm here to help you process those emotions and level up your mental game! 🚀\n\n"
+        "Just share whatever's on your mind - no judgment, just support! ✨"
     )
     
     # Set user state to therapy mode
@@ -101,8 +108,12 @@ async def journal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     
     await update.message.reply_text(
-        "Let's journal a new trade. First, what date did you take this trade? "
-        "Please use the format YYYY-MM-DD (e.g., 2025-04-29), or enter 'today' for today's date."
+        "📝 *Time to Record Your Trading Journey!* 📊\n\n"
+        "Let's capture all the details of your trade to build your success blueprint! 🚀\n\n"
+        "First up, when did you make this trade? 📅\n"
+        "• Use format YYYY-MM-DD (like 2025-04-29)\n"
+        "• Or just type 'today' for today's date\n\n"
+        "Pro traders know documentation leads to domination! 💪"
     )
     
     # Set user state to collect trade date
@@ -113,19 +124,62 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show trading statistics and analytics"""
     user = get_or_create_user(update.effective_user.id)
     
-    if not user.registration_complete:
+    # Special admin case to show global stats
+    admin_mode = False
+    if is_admin(update.effective_user.id) and context.args and context.args[0].lower() == "all":
+        admin_mode = True
+        await update.message.reply_text(
+            "🔐 *Admin Mode Activated* 🔐\n"
+            "Fetching global statistics for all users..."
+        )
+        
+    if not admin_mode and not user.registration_complete:
         await update.message.reply_text(
             "Please complete your registration first with /start"
         )
         return
     
     try:
-        # Get stats using analytics module
+        if admin_mode:
+            # TODO: Implement global stats calculation
+            # For now, just show basic user metrics
+            total_users = User.query.count()
+            registered_users = User.query.filter_by(registration_complete=True).count()
+            total_trades = Trade.query.count()
+            
+            # Get recent trades
+            recent_trades = Trade.query.order_by(Trade.created_at.desc()).limit(5).all()
+            
+            # Format admin stats
+            admin_stats = (
+                f"👑 *Global System Statistics* 👑\n\n"
+                f"Total Users: {total_users}\n"
+                f"Registered Users: {registered_users}\n"
+                f"Total Trades Recorded: {total_trades}\n\n"
+                f"Recent Activity:\n"
+            )
+            
+            for trade in recent_trades:
+                user_name = User.query.get(trade.user_id).full_name or f"User {trade.user_id}"
+                admin_stats += (
+                    f"- {user_name}: {trade.pair_traded} ({trade.result}) on {trade.date}\n"
+                )
+                
+            await update.message.reply_text(
+                admin_stats,
+                parse_mode='Markdown'
+            )
+            return
+            
+        # For regular users, get personal stats
         stats = analytics.calculate_stats(user.id)
         
         if not stats.get('total_trades', 0):
             await update.message.reply_text(
-                "You haven't recorded any trades yet. Use /journal to log your first trade."
+                "📈 *Your Trading Journey Starts Now!* 📊\n\n"
+                "Looks like you haven't recorded any trades yet! 🔍\n\n"
+                "Ready to start building your trading success? Hit /journal to log your first trade! 🚀\n"
+                "The best traders are the ones who track every move! 💪"
             )
             return
         
@@ -161,7 +215,33 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Provide AI-based summary and analysis of trading behavior"""
     user = get_or_create_user(update.effective_user.id)
     
-    if not user.registration_complete:
+    # Check for admin mode
+    admin_mode = False
+    if is_admin(update.effective_user.id) and context.args:
+        # Admin can request summary for a specific user by Telegram ID
+        try:
+            target_telegram_id = int(context.args[0])
+            target_user = User.query.filter_by(telegram_id=target_telegram_id).first()
+            
+            if target_user:
+                user = target_user
+                admin_mode = True
+                await update.message.reply_text(
+                    f"🔐 *Admin Mode Activated* 🔐\n"
+                    f"Analyzing trading patterns for user: {user.full_name} (ID: {user.telegram_id})"
+                )
+            else:
+                await update.message.reply_text(
+                    f"⚠️ User with Telegram ID {target_telegram_id} not found."
+                )
+                return
+        except ValueError:
+            await update.message.reply_text(
+                "⚠️ Invalid Telegram ID format. Please provide a numeric Telegram ID."
+            )
+            return
+    
+    if not admin_mode and not user.registration_complete:
         await update.message.reply_text(
             "Please complete your registration first with /start"
         )
@@ -173,7 +253,10 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
         if not trades:
             await update.message.reply_text(
-                "You haven't recorded any trades yet. Use /journal to log your first trade."
+                "📊 *AI Analysis Needs Data* 📊\n\n"
+                "I'm ready to provide some amazing insights, but I need trades to analyze first! 🔍\n\n"
+                "The magic happens after you've logged some trades. Use /journal to start recording your trading journey! 🚀\n\n"
+                "Remember: The more trades you log, the more powerful the AI analysis becomes! ✨"
             )
             return
         
@@ -191,7 +274,9 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         
         # Get loading message
         loading_message = await update.message.reply_text(
-            "Analyzing your trading patterns... This might take a moment."
+            "🧠 *AI Trade Detective at Work!* 🔍\n\n"
+            "Crunching your data and spotting those hidden patterns... 💫\n"
+            "This trading wizardry takes just a moment, but the insights will be worth it! ⏳"
         )
         
         # Get AI summary
@@ -204,7 +289,11 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error(f"Error generating summary: {e}")
         await update.message.reply_text(
-            "Sorry, there was an error generating your trading summary. Please try again later."
+            "🤔 *AI Brain Temporarily Overloaded!* 🤖\n\n"
+            "Whoa! Looks like our AI trade analyzer needs a quick coffee break! ☕\n\n"
+            "This happens sometimes when my brain is processing many traders' data at once. "
+            "Please try again in a moment when I've had a chance to recharge my thinking circuits! 🔄\n\n"
+            "In the meantime, you can continue journaling your trades with /journal or check your stats with /stats! 📊"
         )
 
 # Report command
@@ -239,8 +328,10 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             
             if not report_data.get('total_trades', 0):
                 await update.message.reply_text(
-                    f"No trades found for the current week ({start_of_week} to {end_of_week}). "
-                    f"Use /journal to log your trades."
+                    f"📅 *No Trades This Week* 📅\n\n"
+                    f"Looks like you haven't recorded any trades from {start_of_week} to {end_of_week}. 🔍\n\n"
+                    f"Ready to change that? Hit /journal to log your first trade of the week! 🚀\n"
+                    f"Consistent journaling is your secret weapon to trading success! 💪"
                 )
                 return
             
@@ -261,17 +352,26 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             db.session.add(report)
             db.session.commit()
         
-        # Format the report
+        # Format the report with more engaging language and emojis
+        # Add profit/loss emoji indicator
+        pl_emoji = "🟢" if report.net_profit_loss > 0 else "🔴" if report.net_profit_loss < 0 else "⚪"
+        
+        # Create a simple performance bar using emojis
+        win_rate_int = int(report.win_rate)
+        performance_bar = "🟩" * (win_rate_int // 10) + "⬜" * ((100 - win_rate_int) // 10)
+        
         report_text = (
-            f"📝 *Weekly Trading Report* 📝\n"
-            f"Week: {report.week_start} to {report.week_end}\n\n"
-            f"Total Trades: {report.total_trades}\n"
-            f"Wins: {report.wins}\n"
-            f"Losses: {report.losses}\n"
-            f"Breakevens: {report.breakevens}\n"
-            f"Effective Win Rate: {report.win_rate:.2f}%\n"
-            f"Net P/L: ${report.net_profit_loss:.2f}\n\n"
-            f"Notes: {report.notes}"
+            f"📊 *Your Trading Week in Review* 📊\n"
+            f"📅 Week: {report.week_start} to {report.week_end}\n\n"
+            f"🎯 *Performance Summary*\n"
+            f"Total Trades: {report.total_trades} trades\n"
+            f"Wins: {report.wins} ✅ | Losses: {report.losses} ❌ | Breakeven: {report.breakevens} ⚖️\n\n"
+            f"Win Rate: {report.win_rate:.1f}%\n"
+            f"{performance_bar}\n\n"
+            f"{pl_emoji} Net P/L: ${report.net_profit_loss:.2f}\n\n"
+            f"📝 *Trading Notes*\n"
+            f"{report.notes or 'No notes for this week.'}\n\n"
+            f"Keep building those positive habits! 💪"
         )
         
         await update.message.reply_text(
@@ -281,24 +381,197 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error(f"Error generating report: {e}")
         await update.message.reply_text(
-            "Sorry, there was an error generating your weekly report. Please try again later."
+            "⚠️ *Oops! A Small Hiccup!* ⚠️\n\n"
+            "Our trading wizards are having trouble brewing your weekly report right now. 🧙‍♂️\n\n"
+            "Don't worry! This is just a temporary glitch. Please try again in a few moments, "
+            "or continue capturing those awesome trades with /journal! 📝\n\n"
+            "Thanks for your patience! 💪"
         )
+
+# Broadcast command
+def is_admin(telegram_id):
+    """Check if a user is an admin"""
+    # Get admin IDs from environment variable
+    admin_ids_str = os.environ.get('ADMIN_TELEGRAM_IDS', '')
+    
+    if not admin_ids_str:
+        # If no admin IDs are defined, log a warning
+        logger.warning("No admin Telegram IDs defined in ADMIN_TELEGRAM_IDS environment variable")
+        return False
+        
+    # Parse comma-separated admin IDs
+    try:
+        admin_ids = [int(id_str.strip()) for id_str in admin_ids_str.split(',') if id_str.strip()]
+        return telegram_id in admin_ids
+    except ValueError:
+        logger.error(f"Invalid admin Telegram ID format in environment variable: {admin_ids_str}")
+        return False
+
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Broadcast a message to all users"""
+    user = get_or_create_user(update.effective_user.id)
+    
+    # Check if user is admin
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text(
+            "⚠️ Sorry, only administrators can use the broadcast command."
+        )
+        return
+    
+    # Only allow specific admins to use this command (you can customize this list)
+    # For now, anyone can use it for demonstration purposes, but you should restrict it in production
+    # admin_telegram_ids = [123456789]  # Replace with your Telegram ID
+    # if user.telegram_id not in admin_telegram_ids:
+    #     await update.message.reply_text("You don't have permission to use this command.")
+    #     return
+    
+    await update.message.reply_text(
+        "✉️ *Broadcast Message System* ✉️\n\n"
+        "Please compose the message you want to send to all users. "
+        "This message will be delivered as an announcement from the bot.\n\n"
+        "Send your message now, or type /cancel to abort."
+    )
+    
+    # Set user state to compose broadcast message
+    set_user_state(user.id, BROADCAST_STATES.COMPOSE)
+
+# List trades command
+async def list_trades(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List recent trades for the user"""
+    user = get_or_create_user(update.effective_user.id)
+    
+    if not user.registration_complete:
+        await update.message.reply_text(
+            "Please complete your registration first with /start"
+        )
+        return
+    
+    # Get pagination parameter from context
+    page = context.user_data.get('trades_page', 1)
+    trades_per_page = 5
+    
+    # Calculate offset
+    offset = (page - 1) * trades_per_page
+    
+    # Get trades with pagination
+    trades = Trade.query.filter_by(user_id=user.id).order_by(Trade.date.desc()).offset(offset).limit(trades_per_page).all()
+    total_trades = Trade.query.filter_by(user_id=user.id).count()
+    total_pages = (total_trades + trades_per_page - 1) // trades_per_page
+    
+    if not trades:
+        if page > 1:
+            # If user navigated past the last page, reset to page 1
+            context.user_data['trades_page'] = 1
+            await list_trades(update, context)
+            return
+        else:
+            await update.message.reply_text(
+                "📖 *Your Trading Journal Awaits!* 📝\n\n"
+                "Your journal is ready for its first entry! No trades recorded yet. 🔍\n\n"
+                "Start capturing your trading journey with /journal and begin building your success database! 🚀\n\n"
+                "Remember: Every great trader's journey begins with that first documented trade! 💯"
+            )
+            return
+    
+    # Format trades list
+    trades_text = f"📖 *Your Trading Journal* (Page {page}/{total_pages if total_pages > 0 else 1})\n\n"
+    
+    for i, trade in enumerate(trades):
+        # Format profit/loss display
+        pl_display = f"${trade.profit_loss:.2f}" if trade.profit_loss is not None else "$0.00"
+        
+        # Format the result with emoji
+        result_emoji = "✅" if trade.result == "Win" else "❌" if trade.result == "Loss" else "⚖️"
+        
+        trades_text += (
+            f"*Trade #{trade.id}* - {trade.date}\n"
+            f"Pair: {trade.pair_traded}\n"
+            f"Result: {result_emoji} {trade.result} | P/L: {pl_display}\n"
+            f"SL: ${trade.stop_loss:.2f} | TP: ${trade.take_profit:.2f}\n"
+            f"----------------------------\n"
+        )
+    
+    # Add pagination buttons
+    keyboard = []
+    pagination_row = []
+    
+    if page > 1:
+        pagination_row.append(InlineKeyboardButton("◀️ Previous", callback_data="trades_prev_page"))
+    
+    if page < total_pages:
+        pagination_row.append(InlineKeyboardButton("Next ▶️", callback_data="trades_next_page"))
+    
+    if pagination_row:
+        keyboard.append(pagination_row)
+    
+    # Add buttons for trade operations
+    keyboard.append([
+        InlineKeyboardButton("View Trade", callback_data="view_trade"),
+        InlineKeyboardButton("Edit Trade", callback_data="edit_trade"),
+    ])
+    
+    keyboard.append([
+        InlineKeyboardButton("Delete Trade", callback_data="delete_trade")
+    ])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        trades_text,
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
 
 # Help command
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display help information about available commands"""
-    help_text = (
-        "🤖 *Trading Journal Bot Help* 🤖\n\n"
-        "Here are the available commands:\n\n"
-        "/start - Start registration or return to main menu\n"
-        "/journal - Log a new trade\n"
-        "/stats - View your trading statistics\n"
-        "/therapy - Get AI-powered trading psychology support\n"
-        "/summary - Get AI analysis of your trading patterns\n"
-        "/report - Generate weekly trading report\n"
-        "/help - Show this help message\n\n"
-        "If you have any issues or suggestions, please contact support."
+    # Check if user is admin
+    is_user_admin = is_admin(update.effective_user.id)
+    
+    # Standard commands for all users with more engaging language and organization
+    standard_commands = (
+        "🚀 *Your Trading Command Center* 🚀\n\n"
+        "Here's everything you can do with your trading assistant:\n\n"
+        "📝 *Journaling Commands*\n"
+        "• /journal - Record a new trading victory or lesson\n"
+        "• /trades - Browse your complete trading history\n\n"
+        
+        "📊 *Analytics Commands*\n"
+        "• /stats - See your performance metrics and win rates\n"
+        "• /report - Get this week's trading performance report\n"
+        "• /summary - AI analysis of your trading patterns and habits\n\n"
+        
+        "🧠 *Trading Psychology*\n"
+        "• /therapy - Talk with AI about your trading mindset\n\n"
+        
+        "🔧 *System Commands*\n"
+        "• /start - Begin registration or return to main menu\n"
+        "• /help - Show this awesome command list\n\n"
+        
+        "Have questions or suggestions? I'm here to help you crush your trading goals! 💪"
     )
+    
+    # Admin-specific commands with more visual appeal
+    admin_commands = (
+        "\n\n👑 *Admin Command Center* 👑\n\n"
+        "📢 *Communication*\n"
+        "• /broadcast - Send important announcements to all users\n\n"
+        
+        "📊 *Monitoring & Analysis*\n"
+        "• /stats all - View global system metrics and user activity\n"
+        "• /summary [telegram_id] - Get AI analysis for specific trader\n\n"
+        
+        "⚙️ *Configuration*\n"
+        "• Admin access controlled via ADMIN_TELEGRAM_IDS environment variable\n"
+        "• Your admin powers are active and ready to use! ✅\n\n"
+        
+        "With great power comes great responsibility! 💫"
+    )
+    
+    # Combine standard and admin commands if user is an admin
+    help_text = standard_commands
+    if is_user_admin:
+        help_text += admin_commands
     
     await update.message.reply_text(
         help_text,
@@ -388,6 +661,248 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 "If yes, please send the image. If no, type 'skip'."
             )
     
+    elif current_state and current_state.state == BROADCAST_STATES.CONFIRM:
+        # Handle broadcast confirmation
+        if data == "broadcast_confirm":
+            state_data = current_state.get_data() or {}
+            message = state_data.get('message', '')
+            
+            if not message:
+                await query.edit_message_text("Error: No message to broadcast.")
+                clear_user_state(user.id)
+                return
+                
+            # Get all users
+            users = User.query.filter_by(registration_complete=True).all()
+            
+            if not users:
+                await query.edit_message_text("No registered users found to send message to.")
+                clear_user_state(user.id)
+                return
+                
+            # Send the message to all users
+            sent_count = 0
+            try:
+                for recipient in users:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=recipient.telegram_id,
+                            text=f"📢 *ANNOUNCEMENT*\n\n{message}",
+                            parse_mode='Markdown'
+                        )
+                        sent_count += 1
+                    except Exception as e:
+                        logger.error(f"Failed to send broadcast to user {recipient.id}: {e}")
+                
+                # Confirm to the admin
+                await query.edit_message_text(
+                    f"✅ Broadcast sent successfully to {sent_count} out of {len(users)} users."
+                )
+            except Exception as e:
+                logger.error(f"Error during broadcast: {e}")
+                await query.edit_message_text(
+                    f"⚠️ Error during broadcast: {e}"
+                )
+            
+            # Clear the state
+            clear_user_state(user.id)
+            
+        elif data == "broadcast_cancel":
+            await query.edit_message_text("Broadcast cancelled.")
+            clear_user_state(user.id)
+            
+    elif data == "trades_prev_page":
+        # Handle previous page in trade listing
+        current_page = context.user_data.get('trades_page', 1)
+        if current_page > 1:
+            context.user_data['trades_page'] = current_page - 1
+            await query.delete_message()
+            await list_trades(update, context)
+            
+    elif data == "trades_next_page":
+        # Handle next page in trade listing
+        current_page = context.user_data.get('trades_page', 1)
+        context.user_data['trades_page'] = current_page + 1
+        await query.delete_message()
+        await list_trades(update, context)
+        
+    elif data == "view_trade":
+        # Prompt user to choose a trade to view
+        await query.edit_message_text(
+            "Please enter the trade ID number you want to view (e.g., 123):"
+        )
+        set_user_state(user.id, "view_trade_id")
+        
+    elif data == "edit_trade":
+        # Prompt user to choose a trade to edit
+        await query.edit_message_text(
+            "Please enter the trade ID number you want to edit (e.g., 123):"
+        )
+        set_user_state(user.id, "edit_trade_id")
+        
+    elif data == "delete_trade":
+        # Prompt user to choose a trade to delete
+        await query.edit_message_text(
+            "Please enter the trade ID number you want to delete (e.g., 123):"
+        )
+        set_user_state(user.id, "delete_trade_id")
+        
+    elif data.startswith("confirm_delete_"):
+        # Handle deletion confirmation
+        trade_id = int(data.replace("confirm_delete_", ""))
+        trade = Trade.query.filter_by(id=trade_id, user_id=user.id).first()
+        
+        if not trade:
+            await query.edit_message_text(
+                f"Trade #{trade_id} not found or doesn't belong to you."
+            )
+        else:
+            # Delete the trade
+            trade_pair = trade.pair_traded
+            db.session.delete(trade)
+            db.session.commit()
+            
+            await query.edit_message_text(
+                f"✅ Trade #{trade_id} ({trade_pair}) has been deleted."
+            )
+            
+    elif data.startswith("cancel_delete_"):
+        # Cancel deletion
+        trade_id = int(data.replace("cancel_delete_", ""))
+        await query.edit_message_text(
+            f"Deletion of Trade #{trade_id} canceled."
+        )
+        
+    elif data.startswith("edit_field_"):
+        # Handle edit field selection
+        parts = data.split("_")
+        trade_id = int(parts[2])
+        field = parts[3]
+        
+        trade = Trade.query.filter_by(id=trade_id, user_id=user.id).first()
+        if not trade:
+            await query.edit_message_text(
+                f"Trade #{trade_id} not found or doesn't belong to you."
+            )
+            return
+            
+        field_prompts = {
+            "date": "Please enter the new date (YYYY-MM-DD):",
+            "pair": "Please enter the new trading pair:",
+            "sl": "Please enter the new stop loss value (in USD):",
+            "tp": "Please enter the new take profit value (in USD):",
+            "result": "Please select the new result:",
+            "pl": "Please enter the new profit/loss amount (in USD):",
+            "notes": "Please enter the new notes for this trade:"
+        }
+        
+        if field == "result":
+            # Special handling for result field with buttons
+            await query.edit_message_text(
+                "Select the new result for this trade:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("Win", callback_data=f"set_result_{trade_id}_Win")],
+                    [InlineKeyboardButton("Loss", callback_data=f"set_result_{trade_id}_Loss")],
+                    [InlineKeyboardButton("Breakeven", callback_data=f"set_result_{trade_id}_Breakeven")]
+                ])
+            )
+        else:
+            # For all other fields, ask for text input
+            state_data = {"trade_id": trade_id, "field": field}
+            set_user_state(user.id, "edit_trade_value", state_data)
+            await query.edit_message_text(field_prompts.get(field, f"Please enter the new value for {field}:"))
+            
+    elif data.startswith("edit_this_trade_"):
+        # Handle edit button from view trade
+        trade_id = int(data.replace("edit_this_trade_", ""))
+        trade = Trade.query.filter_by(id=trade_id, user_id=user.id).first()
+        
+        if not trade:
+            await query.edit_message_text(
+                f"Trade #{trade_id} not found or doesn't belong to you."
+            )
+            return
+            
+        # Show edit options
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Date", callback_data=f"edit_field_{trade_id}_date")],
+            [InlineKeyboardButton("Pair", callback_data=f"edit_field_{trade_id}_pair")],
+            [InlineKeyboardButton("Stop Loss", callback_data=f"edit_field_{trade_id}_sl")],
+            [InlineKeyboardButton("Take Profit", callback_data=f"edit_field_{trade_id}_tp")],
+            [InlineKeyboardButton("Result", callback_data=f"edit_field_{trade_id}_result")],
+            [InlineKeyboardButton("Profit/Loss", callback_data=f"edit_field_{trade_id}_pl")],
+            [InlineKeyboardButton("Notes", callback_data=f"edit_field_{trade_id}_notes")]
+        ])
+        
+        await query.edit_message_text(
+            f"Which field of Trade #{trade_id} would you like to edit?",
+            reply_markup=keyboard
+        )
+        
+    elif data.startswith("delete_this_trade_"):
+        # Handle delete button from view trade
+        trade_id = int(data.replace("delete_this_trade_", ""))
+        trade = Trade.query.filter_by(id=trade_id, user_id=user.id).first()
+        
+        if not trade:
+            await query.edit_message_text(
+                f"Trade #{trade_id} not found or doesn't belong to you."
+            )
+            return
+            
+        # Ask for confirmation
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Yes, Delete", callback_data=f"confirm_delete_{trade_id}")],
+            [InlineKeyboardButton("❌ No, Cancel", callback_data=f"cancel_delete_{trade_id}")]
+        ])
+        
+        await query.edit_message_text(
+            f"⚠️ Are you sure you want to delete Trade #{trade_id} ({trade.pair_traded})?\n"
+            f"This action cannot be undone.",
+            reply_markup=keyboard
+        )
+    
+    elif data.startswith("set_result_"):
+        # Handle result selection in edit mode
+        parts = data.split("_")
+        trade_id = int(parts[2])
+        new_result = parts[3]
+        
+        trade = Trade.query.filter_by(id=trade_id, user_id=user.id).first()
+        if not trade:
+            await query.edit_message_text(
+                f"Trade #{trade_id} not found or doesn't belong to you."
+            )
+            return
+            
+        # Update trade result
+        trade.result = new_result
+        db.session.commit()
+        
+        # If result is Breakeven, ask for P/L amount
+        if new_result == "Breakeven":
+            state_data = {"trade_id": trade_id, "field": "pl"}
+            set_user_state(user.id, "edit_trade_value", state_data)
+            await query.edit_message_text(
+                "What was your exact profit/loss for this breakeven trade? "
+                "Please enter a positive number for a small profit or a negative number for a small loss."
+            )
+        else:
+            # Show success message with updated trade details
+            await query.edit_message_text(
+                f"✅ Trade #{trade_id} updated successfully!\n\n"
+                f"*Updated Trade Details:*\n"
+                f"Date: {trade.date}\n"
+                f"Pair: {trade.pair_traded}\n"
+                f"Result: {trade.result}\n"
+                f"P/L: ${trade.profit_loss if trade.profit_loss is not None else 0:.2f}\n"
+                f"SL: ${trade.stop_loss:.2f}\n"
+                f"TP: ${trade.take_profit:.2f}\n"
+                f"Notes: {trade.notes or 'None'}\n\n"
+                f"Use /trades to view your trade journal.",
+                parse_mode='Markdown'
+            )
+            
     else:
         # Generic fallback
         await query.edit_message_text(
@@ -502,7 +1017,242 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 "Please enter a valid number for your initial balance."
             )
     
+    # Handle trade management states
+    elif state == "view_trade_id":
+        try:
+            trade_id = int(update.message.text)
+            trade = Trade.query.filter_by(id=trade_id, user_id=user.id).first()
+            
+            if not trade:
+                await update.message.reply_text(
+                    f"Trade #{trade_id} not found or doesn't belong to you. Please try again with a valid ID."
+                )
+                clear_user_state(user.id)
+                return
+                
+            # Format notes display, handle case with no notes
+            notes_display = trade.notes if trade.notes else "None"
+            
+            # Format profit/loss amount with dollar sign and decimal places
+            pl_display = f"${trade.profit_loss:.2f}" if trade.profit_loss is not None else "$0.00"
+            
+            # Format result with emoji
+            result_emoji = "✅" if trade.result == "Win" else "❌" if trade.result == "Loss" else "⚖️"
+            
+            # Send trade details
+            trade_details = (
+                f"📝 *Trade #{trade.id} Details*\n\n"
+                f"📅 Date: {trade.date}\n"
+                f"📊 Pair: {trade.pair_traded}\n"
+                f"🎯 Result: {result_emoji} {trade.result}\n"
+                f"💰 Profit/Loss: {pl_display}\n"
+                f"🛑 Stop Loss: ${trade.stop_loss:.2f}\n"
+                f"🚀 Take Profit: ${trade.take_profit:.2f}\n"
+                f"📝 Notes: {notes_display}\n"
+            )
+            
+            # Add screenshot if available
+            if trade.screenshot_id:
+                await update.message.reply_photo(
+                    photo=trade.screenshot_id,
+                    caption=trade_details,
+                    parse_mode='Markdown'
+                )
+            else:
+                await update.message.reply_text(
+                    trade_details,
+                    parse_mode='Markdown'
+                )
+                
+            # After viewing, provide buttons to edit or delete
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✏️ Edit This Trade", callback_data=f"edit_this_trade_{trade_id}")],
+                [InlineKeyboardButton("🗑️ Delete This Trade", callback_data=f"delete_this_trade_{trade_id}")]
+            ])
+            
+            await update.message.reply_text(
+                "Would you like to edit or delete this trade?",
+                reply_markup=keyboard
+            )
+            
+            clear_user_state(user.id)
+            
+        except ValueError:
+            await update.message.reply_text(
+                "Please enter a valid trade ID number."
+            )
+            
+    elif state == "edit_trade_id":
+        try:
+            trade_id = int(update.message.text)
+            trade = Trade.query.filter_by(id=trade_id, user_id=user.id).first()
+            
+            if not trade:
+                await update.message.reply_text(
+                    f"Trade #{trade_id} not found or doesn't belong to you. Please try again with a valid ID."
+                )
+                clear_user_state(user.id)
+                return
+                
+            # Show edit options
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("Date", callback_data=f"edit_field_{trade_id}_date")],
+                [InlineKeyboardButton("Pair", callback_data=f"edit_field_{trade_id}_pair")],
+                [InlineKeyboardButton("Stop Loss", callback_data=f"edit_field_{trade_id}_sl")],
+                [InlineKeyboardButton("Take Profit", callback_data=f"edit_field_{trade_id}_tp")],
+                [InlineKeyboardButton("Result", callback_data=f"edit_field_{trade_id}_result")],
+                [InlineKeyboardButton("Profit/Loss", callback_data=f"edit_field_{trade_id}_pl")],
+                [InlineKeyboardButton("Notes", callback_data=f"edit_field_{trade_id}_notes")]
+            ])
+            
+            await update.message.reply_text(
+                f"Which field of Trade #{trade_id} would you like to edit?",
+                reply_markup=keyboard
+            )
+            
+            clear_user_state(user.id)
+            
+        except ValueError:
+            await update.message.reply_text(
+                "Please enter a valid trade ID number."
+            )
+            
+    elif state == "delete_trade_id":
+        try:
+            trade_id = int(update.message.text)
+            trade = Trade.query.filter_by(id=trade_id, user_id=user.id).first()
+            
+            if not trade:
+                await update.message.reply_text(
+                    f"Trade #{trade_id} not found or doesn't belong to you. Please try again with a valid ID."
+                )
+                clear_user_state(user.id)
+                return
+                
+            # Ask for confirmation
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Yes, Delete", callback_data=f"confirm_delete_{trade_id}")],
+                [InlineKeyboardButton("❌ No, Cancel", callback_data=f"cancel_delete_{trade_id}")]
+            ])
+            
+            await update.message.reply_text(
+                f"⚠️ Are you sure you want to delete Trade #{trade_id} ({trade.pair_traded})?\n"
+                f"This action cannot be undone.",
+                reply_markup=keyboard
+            )
+            
+            clear_user_state(user.id)
+            
+        except ValueError:
+            await update.message.reply_text(
+                "Please enter a valid trade ID number."
+            )
+            
+    elif state == "edit_trade_value":
+        # Get the trade and field to edit
+        trade_id = state_data.get('trade_id')
+        field = state_data.get('field')
+        
+        if not trade_id or not field:
+            await update.message.reply_text(
+                "Error: Missing trade ID or field to edit."
+            )
+            clear_user_state(user.id)
+            return
+            
+        trade = Trade.query.filter_by(id=trade_id, user_id=user.id).first()
+        if not trade:
+            await update.message.reply_text(
+                f"Trade #{trade_id} not found or doesn't belong to you."
+            )
+            clear_user_state(user.id)
+            return
+            
+        # Process the edit based on the field
+        try:
+            if field == "date":
+                try:
+                    # Parse date string into a date object
+                    date_obj = datetime.strptime(update.message.text, "%Y-%m-%d").date()
+                    trade.date = date_obj
+                except ValueError:
+                    await update.message.reply_text(
+                        "Invalid date format. Please use YYYY-MM-DD format."
+                    )
+                    return
+                    
+            elif field == "pair":
+                trade.pair_traded = update.message.text
+                
+            elif field == "sl":
+                trade.stop_loss = float(update.message.text)
+                
+            elif field == "tp":
+                trade.take_profit = float(update.message.text)
+                
+            elif field == "pl":
+                trade.profit_loss = float(update.message.text)
+                
+            elif field == "notes":
+                # Make notes mandatory for better record-keeping
+                if not update.message.text or update.message.text.strip() == "":
+                    await update.message.reply_text(
+                        "Trade notes cannot be empty. Please provide meaningful notes about this trade."
+                    )
+                    return
+                trade.notes = update.message.text
+                
+            # Save changes to the database
+            db.session.commit()
+            
+            # Show success message with updated trade details
+            await update.message.reply_text(
+                f"✅ Trade #{trade_id} updated successfully!\n\n"
+                f"*Updated Trade Details:*\n"
+                f"Date: {trade.date}\n"
+                f"Pair: {trade.pair_traded}\n"
+                f"Result: {trade.result}\n"
+                f"P/L: ${trade.profit_loss if trade.profit_loss is not None else 0:.2f}\n"
+                f"SL: ${trade.stop_loss:.2f}\n"
+                f"TP: ${trade.take_profit:.2f}\n"
+                f"Notes: {trade.notes or 'None'}\n\n"
+                f"Use /trades to view your trade journal.",
+                parse_mode='Markdown'
+            )
+            
+            clear_user_state(user.id)
+            
+        except ValueError:
+            await update.message.reply_text(
+                f"Invalid value for {field}. Please try again with a valid number."
+            )
+            
     # Handle therapy states
+    # Handle broadcast states
+    elif state == BROADCAST_STATES.COMPOSE:
+        if update.message.text.lower() == '/cancel':
+            await update.message.reply_text("Broadcast message cancelled.")
+            clear_user_state(user.id)
+            return
+            
+        # Store the broadcast message
+        state_data['message'] = update.message.text
+        set_user_state(user.id, BROADCAST_STATES.CONFIRM, state_data)
+        
+        # Ask for confirmation
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Send to All Users", callback_data="broadcast_confirm")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="broadcast_cancel")]
+        ])
+        
+        await update.message.reply_text(
+            f"📢 *Preview of your broadcast message:*\n\n"
+            f"{update.message.text}\n\n"
+            f"Are you sure you want to send this message to all users?",
+            reply_markup=keyboard,
+            parse_mode='Markdown'
+        )
+        
     elif state == THERAPY_STATES.ACTIVE:
         # Store the user's message in the therapy session
         therapy_session = TherapySession.query.filter_by(user_id=user.id).order_by(TherapySession.created_at.desc()).first()

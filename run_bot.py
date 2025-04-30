@@ -32,8 +32,8 @@ from telegram.ext import (
 
 # Import the handlers
 from handlers import (
-    start, therapy, journal, stats, summary, report, 
-    help_command, button_callback, message_handler
+    start, therapy, journal, stats, summary, report, broadcast,
+    help_command, button_callback, message_handler, list_trades
 )
 
 async def main():
@@ -47,9 +47,11 @@ async def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("therapy", therapy))
     application.add_handler(CommandHandler("journal", journal))
+    application.add_handler(CommandHandler("trades", list_trades))
     application.add_handler(CommandHandler("stats", stats))
     application.add_handler(CommandHandler("summary", summary))
     application.add_handler(CommandHandler("report", report))
+    application.add_handler(CommandHandler("broadcast", broadcast))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(MessageHandler(filters.ALL, message_handler))

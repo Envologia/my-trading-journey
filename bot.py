@@ -6,6 +6,7 @@ import os
 import json
 import logging
 import asyncio
+from datetime import datetime
 from flask import Flask, request, jsonify, render_template, url_for
 from telegram import Bot, Update
 
@@ -26,6 +27,30 @@ app = Flask(__name__)
 def index():
     """Render a simple HTML page for bot verification"""
     return render_template('index.html')
+
+@app.route('/dashboard')
+def dashboard():
+    """Display bot statistics and user count in a simple dashboard"""
+    from models import User
+    
+    # Get count of all users
+    total_users = User.query.count()
+    
+    # Get count of completed registrations
+    registered_users = User.query.filter_by(registration_complete=True).count()
+    
+    # Get recent users (last 10)
+    recent_users = User.query.order_by(User.created_at.desc()).limit(10).all()
+    
+    # Create a function to get current time
+    def now():
+        return datetime.utcnow()
+    
+    return render_template('dashboard.html', 
+                           total_users=total_users,
+                           registered_users=registered_users,
+                           recent_users=recent_users,
+                           now=now)
 
 @app.route('/status')
 def bot_status():

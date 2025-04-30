@@ -34,6 +34,10 @@ class THERAPY_STATES:
     ACTIVE = 'therapy_active'
     COMPLETED = 'therapy_completed'
 
+class BROADCAST_STATES:
+    COMPOSE = 'broadcast_compose'
+    CONFIRM = 'broadcast_confirm'
+
 def get_user_state(user_id):
     """Get the current state for a user"""
     state = UserState.query.filter_by(user_id=user_id).first()

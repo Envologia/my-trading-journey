@@ -36,3 +36,28 @@ def register_routes(app):
             'status': 'ok',
             'message': 'Server is alive'
         })
+    
+    @app.route('/dashboard')
+    def dashboard():
+        """Display bot statistics and user count in a simple dashboard"""
+        from datetime import datetime
+        from models import User
+        
+        # Get count of all users
+        total_users = User.query.count()
+        
+        # Get count of completed registrations
+        registered_users = User.query.filter_by(registration_complete=True).count()
+        
+        # Get recent users (last 10)
+        recent_users = User.query.order_by(User.created_at.desc()).limit(10).all()
+        
+        # Create a function to get current time
+        def now():
+            return datetime.utcnow()
+        
+        return render_template('dashboard.html', 
+                               total_users=total_users,
+                               registered_users=registered_users,
+                               recent_users=recent_users,
+                               now=now)
