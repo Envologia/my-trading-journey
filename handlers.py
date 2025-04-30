@@ -150,20 +150,58 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             # Get recent trades
             recent_trades = Trade.query.order_by(Trade.created_at.desc()).limit(5).all()
             
-            # Format admin stats
+            # Get more detailed admin statistics
+            active_users_this_week = db.session.query(Trade.user_id).distinct().filter(
+                Trade.created_at >= datetime.utcnow() - timedelta(days=7)
+            ).count()
+            
+            win_trades = Trade.query.filter_by(result="Win").count()
+            loss_trades = Trade.query.filter_by(result="Loss").count()
+            breakeven_trades = Trade.query.filter_by(result="Breakeven").count()
+            
+            # Calculate platform-wide win rate with type-safe handling
+            if (win_trades + loss_trades) > 0:
+                overall_win_rate = (win_trades / (win_trades + loss_trades)) * 100
+            else:
+                overall_win_rate = 0.0
+                
+            # Create a performance bar for overall win rate
+            win_rate_capped = max(0, min(100, overall_win_rate))
+            green_blocks = round(win_rate_capped / 10)
+            white_blocks = 10 - green_blocks
+            performance_bar = "🟩" * green_blocks + "⬜" * white_blocks
+            
+            # Format admin stats with more visual appeal and organization
             admin_stats = (
-                f"👑 *Global System Statistics* 👑\n\n"
-                f"Total Users: {total_users}\n"
-                f"Registered Users: {registered_users}\n"
-                f"Total Trades Recorded: {total_trades}\n\n"
-                f"Recent Activity:\n"
+                f"👑 *Trading Journal Bot - Admin Dashboard* 👑\n\n"
+                f"📊 *System Overview*\n"
+                f"Total Users: {total_users} accounts\n"
+                f"Registered Users: {registered_users} completed\n"
+                f"Active Past Week: {active_users_this_week} traders\n\n"
+                
+                f"📈 *Trading Activity*\n"
+                f"Total Trades: {total_trades} entries\n"
+                f"Platform Win Rate: {overall_win_rate:.1f}%\n"
+                f"{performance_bar}\n"
+                f"Wins: {win_trades} ✅ | Losses: {loss_trades} ❌ | Breakeven: {breakeven_trades} ⚖️\n\n"
+                
+                f"🔄 *Recent Activity*\n"
             )
             
-            for trade in recent_trades:
-                user_name = User.query.get(trade.user_id).full_name or f"User {trade.user_id}"
-                admin_stats += (
-                    f"- {user_name}: {trade.pair_traded} ({trade.result}) on {trade.date}\n"
-                )
+            # Add recent activity with improved formatting
+            if recent_trades:
+                for trade in recent_trades:
+                    user_name = User.query.get(trade.user_id).full_name or f"User {trade.user_id}"
+                    # Format result with emoji
+                    result_emoji = "✅" if trade.result == "Win" else "❌" if trade.result == "Loss" else "⚖️"
+                    # Create formatted P/L display if available
+                    pl_display = f" (${trade.profit_loss:.2f})" if trade.profit_loss is not None else ""
+                    
+                    admin_stats += (
+                        f"• {user_name}: {trade.pair_traded} {result_emoji}{pl_display} - {trade.date}\n"
+                    )
+            else:
+                admin_stats += "No recent trading activity.\n"
                 
             await update.message.reply_text(
                 admin_stats,
@@ -183,21 +221,58 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             return
         
-        # Format the statistics
+        # Create a win rate display with details on breakeven handling
+        breakeven_detail = ""
+        if stats['breakevens'] > 0:
+            profitable_be = stats['effective_wins'] - stats['wins']
+            unprofitable_be = stats['effective_losses'] - stats['losses']
+            neutral_be = stats['breakevens'] - profitable_be - unprofitable_be
+            
+            be_details = []
+            if profitable_be > 0:
+                be_details.append(f"{profitable_be} profitable 📈")
+            if unprofitable_be > 0:
+                be_details.append(f"{unprofitable_be} unprofitable 📉") 
+            if neutral_be > 0:
+                be_details.append(f"{neutral_be} neutral ↔️")
+                
+            if be_details:
+                breakeven_detail = f" ({', '.join(be_details)})"
+        
+        # Create a performance bar for win rate
+        win_rate = stats['win_rate']
+        win_rate_capped = max(0, min(100, win_rate))
+        green_blocks = round(win_rate_capped / 10)
+        white_blocks = 10 - green_blocks
+        performance_bar = "🟩" * green_blocks + "⬜" * white_blocks
+        
+        # Add profit/loss emoji indicator
+        pl_emoji = "🟢" if stats['net_profit_loss'] > 0 else "🔴" if stats['net_profit_loss'] < 0 else "⚪"
+        
+        # Format the statistics with a more engaging and visual layout
         stats_text = (
-            f"📊 *Trading Statistics* 📊\n\n"
-            f"Total Trades: {stats['total_trades']}\n"
-            f"Wins: {stats['wins']} (Raw) / {stats['effective_wins']} (Effective)\n"
-            f"Losses: {stats['losses']} (Raw) / {stats['effective_losses']} (Effective)\n"
-            f"Breakeven: {stats['breakevens']}\n"
-            f"Win Rate: {stats['win_rate']}%\n\n"
-            f"Net Profit/Loss: ${stats['net_profit_loss']:.2f}\n"
-            f"Average Win: ${stats['avg_win']:.2f}\n"
-            f"Average Loss: ${stats['avg_loss']:.2f}\n"
-            f"Risk/Reward Ratio: {stats['risk_reward_ratio']:.2f}\n\n"
-            f"Most Traded Pair: {stats['most_traded_pair']}\n"
-            f"Best Performing Pair: {stats['best_pair']}\n"
-            f"Worst Performing Pair: {stats['worst_pair']}\n"
+            f"📊 *Your Trading Performance Dashboard* 📊\n\n"
+            f"🎯 *Overall Performance*\n"
+            f"Total Trades: {stats['total_trades']} trades\n"
+            f"Win Rate: {win_rate:.1f}%\n"
+            f"{performance_bar}\n"
+            f"{pl_emoji} Net P/L: ${stats['net_profit_loss']:.2f}\n\n"
+            
+            f"🔍 *Trading Breakdown*\n"
+            f"Wins: {stats['wins']} ✅\n"
+            f"Losses: {stats['losses']} ❌\n" 
+            f"Breakeven: {stats['breakevens']}{breakeven_detail} ⚖️\n\n"
+            
+            f"💰 *Risk Analysis*\n"
+            f"Avg Win: ${stats['avg_win']:.2f} | Avg Loss: ${stats['avg_loss']:.2f}\n"
+            f"Risk/Reward: {stats['risk_reward_ratio']:.2f}\n\n"
+            
+            f"📈 *Trading Patterns*\n"
+            f"Most Traded: {stats['most_traded_pair']}\n"
+            f"Best Performer: {stats['best_pair']}\n"
+            f"Needs Improvement: {stats['worst_pair']}\n\n"
+            
+            f"💪 Keep refining your edge! Journal consistently for the best insights."
         )
         
         await update.message.reply_text(

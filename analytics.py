@@ -15,8 +15,10 @@ logger = logging.getLogger(__name__)
 def calculate_stats(user_id):
     """Calculate trading statistics for a user"""
     try:
+        logger.info(f"Starting stats calculation for user_id: {user_id}")
         # Get all trades for this user
         trades = Trade.query.filter_by(user_id=user_id).all()
+        logger.info(f"Retrieved {len(trades)} trades for statistics calculation")
         
         if not trades:
             return {
@@ -44,9 +46,30 @@ def calculate_stats(user_id):
         effective_wins = wins + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)
         effective_losses = losses + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)
         
-        # Calculate win/loss rates based on effective counts
-        win_rate = (effective_wins / total_trades) * 100 if total_trades > 0 else 0
-        loss_rate = (effective_losses / total_trades) * 100 if total_trades > 0 else 0
+        # Calculate win/loss rates with a more reliable approach
+        # Only count trades with a clear outcome
+        counted_trades = wins + losses
+        # Add breakeven trades that have a non-zero profit/loss value
+        profitable_be = sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)
+        unprofitable_be = sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)
+        counted_trades += profitable_be + unprofitable_be
+        
+        # Log detailed calculation information for debugging
+        logger.info(f"Win rate calculation details:")
+        logger.info(f"Raw win count: {wins}, Raw loss count: {losses}")
+        logger.info(f"Profitable breakevens: {profitable_be}, Unprofitable breakevens: {unprofitable_be}")
+        logger.info(f"Effective wins: {effective_wins}, Effective losses: {effective_losses}")
+        logger.info(f"Counted trades: {counted_trades}")
+        
+        # Calculate rates, ensuring we don't divide by zero
+        if counted_trades > 0:
+            win_rate = (effective_wins / counted_trades) * 100
+            loss_rate = (effective_losses / counted_trades) * 100
+            logger.info(f"Calculated win rate: {win_rate:.2f}%, loss rate: {loss_rate:.2f}%")
+        else:
+            win_rate = 0.0
+            loss_rate = 0.0
+            logger.info("No countable trades (wins/losses), using default rates of 0%")
         
         # Calculate profit/loss metrics
         net_profit_loss = sum(t.profit_loss or 0 for t in trades)
@@ -76,24 +99,39 @@ def calculate_stats(user_id):
         
         most_traded_pair = max(pair_counts.items(), key=lambda x: x[1])[0] if pair_counts else 'None'
         
-        # Find best and worst performing pairs
-        pair_performance = defaultdict(lambda: {'profit_loss': 0, 'count': 0})
+        # Find best and worst performing pairs with proper type handling
+        pair_performance = {}
         
         for trade in trades:
             if trade.profit_loss is not None:
                 pair = trade.pair_traded
-                pair_performance[pair]['profit_loss'] += trade.profit_loss
+                # Initialize if not exists
+                if pair not in pair_performance:
+                    pair_performance[pair] = {'profit_loss': 0.0, 'count': 0, 'avg': 0.0}
+                
+                # Update with proper types
+                pair_performance[pair]['profit_loss'] += float(trade.profit_loss)
                 pair_performance[pair]['count'] += 1
         
         # Calculate per-trade average for each pair
         for pair in pair_performance:
-            # Convert count to int explicitly to avoid type issues
-            count = int(pair_performance[pair]['count'])
+            # Get count value
+            count = pair_performance[pair]['count']
             if count > 0:
-                # Store as float explicitly 
-                pair_performance[pair]['avg'] = float(pair_performance[pair]['profit_loss'] / count)
+                # Calculate average and update in dictionary - using direct assignment
+                avg_value = float(pair_performance[pair]['profit_loss'] / count)
+                # Python allows updating dict values even if initialized with different types
+                pair_performance[pair] = {
+                    'profit_loss': pair_performance[pair]['profit_loss'],
+                    'count': count,
+                    'avg': avg_value
+                }
             else:
-                pair_performance[pair]['avg'] = 0.0
+                pair_performance[pair] = {
+                    'profit_loss': pair_performance[pair]['profit_loss'],
+                    'count': count,
+                    'avg': 0.0
+                }
         
         # Find best and worst pairs (must have at least 2 trades)
         qualified_pairs = {k: v for k, v in pair_performance.items() if v['count'] >= 2}
@@ -125,11 +163,13 @@ def calculate_stats(user_id):
 def generate_weekly_report(user_id, start_date, end_date):
     """Generate a weekly report for a user"""
     try:
+        logger.info(f"Generating weekly report for user_id: {user_id} from {start_date} to {end_date}")
         # Get trades for the specified date range
         trades = Trade.query.filter_by(user_id=user_id).filter(
             Trade.date >= start_date,
             Trade.date <= end_date
         ).all()
+        logger.info(f"Retrieved {len(trades)} trades for weekly report")
         
         if not trades:
             return {
@@ -151,10 +191,29 @@ def generate_weekly_report(user_id, start_date, end_date):
         effective_wins = wins + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)
         effective_losses = losses + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)
         
-        # Calculate win rate based on effective wins, ignoring true breakevens (those with zero or null P/L)
-        # Count trades that aren't zero-profit breakevens
-        counted_trades = total_trades - sum(1 for t in trades if t.result == 'Breakeven' and (t.profit_loss is None or t.profit_loss == 0))
-        win_rate = (effective_wins / counted_trades) * 100 if counted_trades > 0 else 0
+        # Calculate win rate using a more direct and reliable formula
+        # First, only count trades with a clear outcome
+        counted_trades = wins + losses
+        # Add breakeven trades that have a non-zero profit/loss value
+        profitable_be = sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)
+        unprofitable_be = sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)
+        counted_trades += profitable_be + unprofitable_be
+        
+        # Log detailed calculation information for debugging
+        logger.info(f"Weekly report win rate calculation details:")
+        logger.info(f"Raw win count: {wins}, Raw loss count: {losses}")
+        logger.info(f"Profitable breakevens: {profitable_be}, Unprofitable breakevens: {unprofitable_be}")
+        logger.info(f"Effective wins: {effective_wins}, Effective losses: {effective_losses}")
+        logger.info(f"Counted trades: {counted_trades}")
+        
+        # Calculate win rate, ensuring we don't divide by zero
+        if counted_trades > 0:
+            # Calculate using the effective wins (raw wins + profitable breakevens)
+            win_rate = effective_wins / counted_trades * 100
+            logger.info(f"Calculated weekly win rate: {win_rate:.2f}%")
+        else:
+            win_rate = 0.0  # Default to zero if no counted trades
+            logger.info("No countable trades in weekly report, using default rate of 0%")
         
         # Calculate profit/loss metrics
         net_profit_loss = sum(t.profit_loss or 0 for t in trades)
