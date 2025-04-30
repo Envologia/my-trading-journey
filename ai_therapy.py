@@ -32,6 +32,7 @@ def get_therapy_response(user_input, user):
             "to traders who may be experiencing stress, anxiety, FOMO, or other psychological challenges related to trading. "
             "Your responses should be empathetic, supportive, and focused on helping the trader develop a healthy mindset. "
             "Avoid giving specific financial or investment advice. Instead, focus on psychological aspects of trading."
+            "and also make it clear and clean also a lil short not that much short but clear "
         )
         
         user_info = (
