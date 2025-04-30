@@ -40,17 +40,29 @@ def calculate_stats(user_id):
         losses = sum(1 for t in trades if t.result == 'Loss')
         breakevens = sum(1 for t in trades if t.result == 'Breakeven')
         
-        # Calculate win/loss rates
-        win_rate = (wins / total_trades) * 100 if total_trades > 0 else 0
-        loss_rate = (losses / total_trades) * 100 if total_trades > 0 else 0
+        # Calculate effective wins/losses including breakeven trades with profit/loss
+        effective_wins = wins + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)
+        effective_losses = losses + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)
+        
+        # Calculate win/loss rates based on effective counts
+        win_rate = (effective_wins / total_trades) * 100 if total_trades > 0 else 0
+        loss_rate = (effective_losses / total_trades) * 100 if total_trades > 0 else 0
         
         # Calculate profit/loss metrics
         net_profit_loss = sum(t.profit_loss or 0 for t in trades)
         
-        # Calculate average win/loss
-        win_trades = [t for t in trades if t.result == 'Win' and t.profit_loss is not None]
-        loss_trades = [t for t in trades if t.result == 'Loss' and t.profit_loss is not None]
+        # Calculate average win/loss including profitable breakevens in wins and loss breakevens in losses
+        # Wins include Win trades and Breakeven trades with positive profit
+        win_trades = [t for t in trades if 
+                      (t.result == 'Win' and t.profit_loss is not None) or 
+                      (t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)]
         
+        # Losses include Loss trades and Breakeven trades with negative profit
+        loss_trades = [t for t in trades if 
+                       (t.result == 'Loss' and t.profit_loss is not None) or 
+                       (t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)]
+        
+        # Calculate averages
         avg_win = sum(t.profit_loss for t in win_trades) / len(win_trades) if win_trades else 0
         avg_loss = abs(sum(t.profit_loss for t in loss_trades) / len(loss_trades)) if loss_trades else 0
         
@@ -91,6 +103,8 @@ def calculate_stats(user_id):
             'wins': wins,
             'losses': losses,
             'breakevens': breakevens,
+            'effective_wins': effective_wins,
+            'effective_losses': effective_losses,
             'win_rate': round(win_rate, 2),
             'loss_rate': round(loss_rate, 2),
             'net_profit_loss': net_profit_loss,
@@ -130,8 +144,12 @@ def generate_weekly_report(user_id, start_date, end_date):
         losses = sum(1 for t in trades if t.result == 'Loss')
         breakevens = sum(1 for t in trades if t.result == 'Breakeven')
         
-        # Calculate win/loss rates
-        win_rate = (wins / total_trades) * 100 if total_trades > 0 else 0
+        # Effective win/loss counts including profitable/unprofitable breakevens
+        effective_wins = wins + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)
+        effective_losses = losses + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)
+        
+        # Calculate win rate based on effective wins
+        win_rate = (effective_wins / total_trades) * 100 if total_trades > 0 else 0
         
         # Calculate profit/loss metrics
         net_profit_loss = sum(t.profit_loss or 0 for t in trades)
@@ -156,6 +174,8 @@ def generate_weekly_report(user_id, start_date, end_date):
             'wins': wins,
             'losses': losses,
             'breakevens': breakevens,
+            'effective_wins': effective_wins,
+            'effective_losses': effective_losses,
             'win_rate': win_rate,
             'net_profit_loss': net_profit_loss,
             'notes': notes

@@ -133,9 +133,10 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         stats_text = (
             f"📊 *Trading Statistics* 📊\n\n"
             f"Total Trades: {stats['total_trades']}\n"
-            f"Wins: {stats['wins']} ({stats['win_rate']}%)\n"
-            f"Losses: {stats['losses']} ({stats['loss_rate']}%)\n"
-            f"Breakeven: {stats['breakevens']}\n\n"
+            f"Wins: {stats['wins']} (Raw) / {stats['effective_wins']} (Effective)\n"
+            f"Losses: {stats['losses']} (Raw) / {stats['effective_losses']} (Effective)\n"
+            f"Breakeven: {stats['breakevens']}\n"
+            f"Win Rate: {stats['win_rate']}%\n\n"
             f"Net Profit/Loss: ${stats['net_profit_loss']:.2f}\n"
             f"Average Win: ${stats['avg_win']:.2f}\n"
             f"Average Loss: ${stats['avg_loss']:.2f}\n"
@@ -268,7 +269,7 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"Wins: {report.wins}\n"
             f"Losses: {report.losses}\n"
             f"Breakevens: {report.breakevens}\n"
-            f"Win Rate: {report.win_rate:.2f}%\n"
+            f"Effective Win Rate: {report.win_rate:.2f}%\n"
             f"Net P/L: ${report.net_profit_loss:.2f}\n\n"
             f"Notes: {report.notes}"
         )
@@ -633,13 +634,17 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             set_user_state(user.id, JOURNAL_STATES.NOTES, state_data)
             
             await update.message.reply_text(
-                "Screenshot saved. Do you have any notes or observations about this trade?"
+                "Screenshot saved. Please provide detailed notes about this trade (required).\n\n"
+                "Consider including: entry/exit reasoning, emotions during the trade, what went well, "
+                "what could be improved, and any patterns you noticed."
             )
         elif update.message.text.lower() == 'skip':
             set_user_state(user.id, JOURNAL_STATES.NOTES, state_data)
             
             await update.message.reply_text(
-                "No screenshot added. Do you have any notes or observations about this trade?"
+                "No screenshot added. Please provide detailed notes about this trade (required).\n\n"
+                "Consider including: entry/exit reasoning, emotions during the trade, what went well, "
+                "what could be improved, and any patterns you noticed."
             )
         else:
             await update.message.reply_text(
@@ -647,6 +652,15 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
     
     elif state == JOURNAL_STATES.NOTES:
+        # Check if notes are provided and not just whitespace
+        if not update.message.text or update.message.text.strip() == '':
+            await update.message.reply_text(
+                "⚠️ Notes are required for each trade. Please provide detailed observations or thoughts about this trade.\n\n"
+                "Proper trade journaling with detailed notes is essential for improvement. Include your reasoning, "
+                "emotions, market conditions, and any lessons learned."
+            )
+            return
+            
         # Store notes in state data
         state_data['notes'] = update.message.text
         
