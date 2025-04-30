@@ -659,7 +659,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             f"Stop Loss: ${trade.stop_loss:.2f}\n"
             f"Take Profit: ${trade.take_profit:.2f}\n"
             f"Result: {trade.result}\n"
-            f"P/L: ${trade.profit_loss:.2f if trade.profit_loss else 0:.2f}\n"
+            f"P/L: ${trade.profit_loss:.2f if trade.profit_loss is not None else 0.00}\n"
             f"Current Balance: ${user.current_balance:.2f}\n\n"
             f"Use /journal to log another trade or /stats to see your statistics."
         )
