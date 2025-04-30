@@ -87,10 +87,13 @@ def calculate_stats(user_id):
         
         # Calculate per-trade average for each pair
         for pair in pair_performance:
-            if pair_performance[pair]['count'] > 0:
-                pair_performance[pair]['avg'] = pair_performance[pair]['profit_loss'] / pair_performance[pair]['count']
+            # Convert count to int explicitly to avoid type issues
+            count = int(pair_performance[pair]['count'])
+            if count > 0:
+                # Store as float explicitly 
+                pair_performance[pair]['avg'] = float(pair_performance[pair]['profit_loss'] / count)
             else:
-                pair_performance[pair]['avg'] = 0
+                pair_performance[pair]['avg'] = 0.0
         
         # Find best and worst pairs (must have at least 2 trades)
         qualified_pairs = {k: v for k, v in pair_performance.items() if v['count'] >= 2}
@@ -148,17 +151,19 @@ def generate_weekly_report(user_id, start_date, end_date):
         effective_wins = wins + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)
         effective_losses = losses + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)
         
-        # Calculate win rate based on effective wins
-        win_rate = (effective_wins / total_trades) * 100 if total_trades > 0 else 0
+        # Calculate win rate based on effective wins, ignoring true breakevens (those with zero or null P/L)
+        # Count trades that aren't zero-profit breakevens
+        counted_trades = total_trades - sum(1 for t in trades if t.result == 'Breakeven' and (t.profit_loss is None or t.profit_loss == 0))
+        win_rate = (effective_wins / counted_trades) * 100 if counted_trades > 0 else 0
         
         # Calculate profit/loss metrics
         net_profit_loss = sum(t.profit_loss or 0 for t in trades)
         
-        # Generate notes based on performance
-        if wins > losses:
-            notes = f"Great week! You had {wins} winning trades, which is {round(win_rate, 2)}% of your total trades."
-        elif losses > wins:
-            notes = f"Challenging week with {losses} losing trades. Review your strategy and consider risk management."
+        # Generate notes based on performance using effective win/loss numbers
+        if effective_wins > effective_losses:
+            notes = f"Great week! You had {effective_wins} winning trades, which is {round(win_rate, 1)}% of your trades."
+        elif effective_losses > effective_wins:
+            notes = f"Challenging week with {effective_losses} losing trades. Review your strategy and consider risk management."
         else:
             notes = "Mixed results this week. Focus on consistency and stick to your trading plan."
         

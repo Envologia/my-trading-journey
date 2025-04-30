@@ -335,19 +335,23 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
                 return
             
-            # Create a new report
+            # Create a new report with effective win/loss counts for more accurate reporting
             report = WeeklyReport(
                 user_id=user.id,
                 week_start=start_of_week,
                 week_end=end_of_week,
                 total_trades=report_data.get('total_trades', 0),
-                wins=report_data.get('wins', 0),
-                losses=report_data.get('losses', 0),
+                wins=report_data.get('wins', 0),  # Nominal win count
+                losses=report_data.get('losses', 0),  # Nominal loss count
                 breakevens=report_data.get('breakevens', 0),
-                win_rate=report_data.get('win_rate', 0.0),
+                win_rate=report_data.get('win_rate', 0.0),  # This is based on effective wins
                 net_profit_loss=report_data.get('net_profit_loss', 0.0),
                 notes=report_data.get('notes', '')
             )
+            
+            # Store effective counts in the notes temporarily (we can add fields to the model later if needed)
+            report.effective_wins = report_data.get('effective_wins', report.wins)
+            report.effective_losses = report_data.get('effective_losses', report.losses)
             
             db.session.add(report)
             db.session.commit()
@@ -356,16 +360,42 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # Add profit/loss emoji indicator
         pl_emoji = "🟢" if report.net_profit_loss > 0 else "🔴" if report.net_profit_loss < 0 else "⚪"
         
-        # Create a simple performance bar using emojis
-        win_rate_int = int(report.win_rate)
-        performance_bar = "🟩" * (win_rate_int // 10) + "⬜" * ((100 - win_rate_int) // 10)
+        # Create a more accurate performance bar using emojis
+        # Ensure win_rate is within 0-100 range
+        win_rate_capped = max(0, min(100, report.win_rate))
+        # Round to nearest 10 for visual display
+        green_blocks = round(win_rate_capped / 10)
+        white_blocks = 10 - green_blocks
+        performance_bar = "🟩" * green_blocks + "⬜" * white_blocks
+        
+        # Get effective win/loss counts if available
+        effective_wins = getattr(report, 'effective_wins', report.wins)
+        effective_losses = getattr(report, 'effective_losses', report.losses)
+        
+        # Calculate how many breakevens were profitable vs unprofitable
+        profitable_breakevens = effective_wins - report.wins if effective_wins > report.wins else 0
+        unprofitable_breakevens = effective_losses - report.losses if effective_losses > report.losses else 0
+        neutral_breakevens = report.breakevens - profitable_breakevens - unprofitable_breakevens
+        
+        # Enhanced breakeven display with profit indicators
+        breakeven_display = f"{report.breakevens} ⚖️"
+        if profitable_breakevens > 0 or unprofitable_breakevens > 0:
+            breakeven_detail = []
+            if profitable_breakevens > 0:
+                breakeven_detail.append(f"{profitable_breakevens} profitable 📈")
+            if unprofitable_breakevens > 0:
+                breakeven_detail.append(f"{unprofitable_breakevens} unprofitable 📉") 
+            if neutral_breakevens > 0:
+                breakeven_detail.append(f"{neutral_breakevens} neutral ↔️")
+            
+            breakeven_display += f" ({' / '.join(breakeven_detail)})"
         
         report_text = (
             f"📊 *Your Trading Week in Review* 📊\n"
             f"📅 Week: {report.week_start} to {report.week_end}\n\n"
             f"🎯 *Performance Summary*\n"
             f"Total Trades: {report.total_trades} trades\n"
-            f"Wins: {report.wins} ✅ | Losses: {report.losses} ❌ | Breakeven: {report.breakevens} ⚖️\n\n"
+            f"Wins: {report.wins} ✅ | Losses: {report.losses} ❌ | Breakeven: {breakeven_display}\n\n"
             f"Win Rate: {report.win_rate:.1f}%\n"
             f"{performance_bar}\n\n"
             f"{pl_emoji} Net P/L: ${report.net_profit_loss:.2f}\n\n"
