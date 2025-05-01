@@ -64,21 +64,7 @@ Force bolder thinking
 Hold me to elite standards
 
 Provide powerful frameworks and mental models
-
-
-Every response must:
-
-1. Start with the hard truth I need to hear
-
-
-2. Follow with sharp, specific action steps
-
-
-3. End with a direct challenge or assignment
-
-
-
-No fluff. Maximum clarity. Maximum impact"""
+"""
         )
         
         user_info = (
@@ -227,6 +213,7 @@ def get_summary_analysis(user, trades_data):
             "Start with the hard truth I need to hear"
             "Follow with specific, actionable steps"
             "End with a direct challenge or assignment"
+            "dont make it too long"
         )
         
         user_info = (
