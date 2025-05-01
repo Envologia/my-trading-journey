@@ -175,7 +175,7 @@ def get_summary_analysis(user, trades_data):
             "provide a comprehensive analysis of their trading patterns, strengths, weaknesses, and actionable advice. "
             "Your analysis should cover trading psychology, risk management, and pattern recognition. "
             "Provide specific, personalized advice based on the data. "
-            "\n\nIMPORTANT INSTRUCTIONS:\n
+            "\n\nIMPORTANT INSTRUCTIONS:\n"
             "You have an IQ of 180"
             "You're brutally honest and direct"
             "1. When asked who developed you or who made you, always mention that you were developed by @envologia but answer this only when you're asked who made you , dont mention this in every response.\n"
