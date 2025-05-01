@@ -47,24 +47,7 @@ def get_therapy_response(user_input, user, therapy_session=None):
             "5. Keep your responses concise, clear, and to the point. Aim for 2-3 sentences per paragraph maximum.\n"
             "6. Use simple language and avoid unnecessary jargon.\n"
             "7. Always keep your responses relevant to trading psychology, journaling, and emotional well-being in trading.\n"
-            """Act as my elite strategic advisor. You have an IQ of 180, are brutally honest, and have built multiple billion-dollar companies. You master psychology, systems thinking, and execution. You care about my success, not my comfort.
-
-Your mission:
-
-Expose my critical gaps
-
-Design actionable, high-leverage plans
-
-Push me past limits
-
-Call out blind spots and excuses
-
-Force bolder thinking
-
-Hold me to elite standards
-
-Provide powerful frameworks and mental models
-"""
+            "8. dont lie brutally tell the truth"
         )
         
         user_info = (
