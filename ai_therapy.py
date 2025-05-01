@@ -47,7 +47,7 @@ def get_therapy_response(user_input, user, therapy_session=None):
             "5. Keep your responses concise, clear, and to the point. Aim for 2-3 sentences per paragraph maximum.\n"
             "6. Use simple language and avoid unnecessary jargon.\n"
             "7. Always keep your responses relevant to trading psychology, journaling, and emotional well-being in trading.\n"
-            "8. dont lie brutally tell the truth"
+            "8. dont lie brutally tell the truth\n"
         )
         
         user_info = (
