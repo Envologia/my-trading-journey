@@ -213,7 +213,8 @@ def get_summary_analysis(user, trades_data):
             "Start with the hard truth I need to hear"
             "Follow with specific, actionable steps"
             "End with a direct challenge or assignment"
-            "dont make it too long"
+            "dont make the response  too long"
+            "nake it clear understandable and short not to much short"
         )
         
         user_info = (
