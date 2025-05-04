@@ -46,20 +46,24 @@ def calculate_stats(user_id):
         effective_wins = wins + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)
         effective_losses = losses + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)
         
-        # Calculate win/loss rates with a more reliable approach
-        # Only count trades with a clear outcome
-        counted_trades = wins + losses
-        # Add breakeven trades that have a non-zero profit/loss value
+        # Calculate win/loss rates using the same formula as weekly reports
+        # Count all trades except neutral breakevens for consistency
+        counted_trades = total_trades
+        # Calculate the number of neutral breakevens (no P/L or zero P/L)
+        neutral_be = sum(1 for t in trades if t.result == 'Breakeven' and (t.profit_loss is None or t.profit_loss == 0))
+        counted_trades -= neutral_be
+        
+        # Get specific counts for detailed logging
         profitable_be = sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)
         unprofitable_be = sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)
-        counted_trades += profitable_be + unprofitable_be
         
         # Log detailed calculation information for debugging
         logger.info(f"Win rate calculation details:")
-        logger.info(f"Raw win count: {wins}, Raw loss count: {losses}")
-        logger.info(f"Profitable breakevens: {profitable_be}, Unprofitable breakevens: {unprofitable_be}")
-        logger.info(f"Effective wins: {effective_wins}, Effective losses: {effective_losses}")
-        logger.info(f"Counted trades: {counted_trades}")
+        logger.info(f"Raw win count: {wins}, Raw loss count: {losses}, Raw breakeven count: {breakevens}")
+        logger.info(f"Profitable breakevens: {profitable_be}, Unprofitable breakevens: {unprofitable_be}, Neutral breakevens: {neutral_be}")
+        logger.info(f"Effective wins (including BE profits): {effective_wins}")
+        logger.info(f"Effective losses (including BE losses): {effective_losses}")
+        logger.info(f"Total trades: {total_trades}, Counted trades: {counted_trades}")
         
         # Calculate rates, ensuring we don't divide by zero
         if counted_trades > 0:
@@ -69,7 +73,7 @@ def calculate_stats(user_id):
         else:
             win_rate = 0.0
             loss_rate = 0.0
-            logger.info("No countable trades (wins/losses), using default rates of 0%")
+            logger.info("No countable trades, using default rates of 0%")
         
         # Calculate profit/loss metrics
         net_profit_loss = sum(t.profit_loss or 0 for t in trades)
@@ -188,27 +192,32 @@ def generate_weekly_report(user_id, start_date, end_date):
         breakevens = sum(1 for t in trades if t.result == 'Breakeven')
         
         # Effective win/loss counts including profitable/unprofitable breakevens
+        # Count all breakeven trades with profit as wins and those with loss as losses
         effective_wins = wins + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)
         effective_losses = losses + sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)
         
-        # Calculate win rate using a more direct and reliable formula
-        # First, only count trades with a clear outcome
-        counted_trades = wins + losses
-        # Add breakeven trades that have a non-zero profit/loss value
+        # Count trades with a clear outcome (including breakeven trades with P/L)
+        # For win rate calculation, we count ALL trades except neutral breakevens
+        counted_trades = total_trades
+        # Remove only breakeven trades that have no P/L value or exactly zero P/L
+        neutral_be = sum(1 for t in trades if t.result == 'Breakeven' and (t.profit_loss is None or t.profit_loss == 0))
+        counted_trades -= neutral_be
+        
+        # Get specific counts for detailed logging
         profitable_be = sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss > 0)
         unprofitable_be = sum(1 for t in trades if t.result == 'Breakeven' and t.profit_loss is not None and t.profit_loss < 0)
-        counted_trades += profitable_be + unprofitable_be
         
         # Log detailed calculation information for debugging
         logger.info(f"Weekly report win rate calculation details:")
-        logger.info(f"Raw win count: {wins}, Raw loss count: {losses}")
-        logger.info(f"Profitable breakevens: {profitable_be}, Unprofitable breakevens: {unprofitable_be}")
-        logger.info(f"Effective wins: {effective_wins}, Effective losses: {effective_losses}")
-        logger.info(f"Counted trades: {counted_trades}")
+        logger.info(f"Raw win count: {wins}, Raw loss count: {losses}, Raw breakeven count: {breakevens}")
+        logger.info(f"Profitable breakevens: {profitable_be}, Unprofitable breakevens: {unprofitable_be}, Neutral breakevens: {neutral_be}")
+        logger.info(f"Effective wins (including BE profits): {effective_wins}")
+        logger.info(f"Effective losses (including BE losses): {effective_losses}")
+        logger.info(f"Total trades: {total_trades}, Counted trades: {counted_trades}")
         
         # Calculate win rate, ensuring we don't divide by zero
         if counted_trades > 0:
-            # Calculate using the effective wins (raw wins + profitable breakevens)
+            # Calculate using effective wins divided by all counted trades
             win_rate = effective_wins / counted_trades * 100
             logger.info(f"Calculated weekly win rate: {win_rate:.2f}%")
         else:
