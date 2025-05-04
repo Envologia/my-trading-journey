@@ -5,6 +5,7 @@ Command handlers for the Telegram bot
 import json
 import logging
 import os
+import asyncio
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -383,10 +384,16 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     
     try:
-        # Get date range for the current week
+        # Get date range for the current week with detailed logging
         today = datetime.utcnow().date()
+        logger.info(f"Current date for weekly report: {today}")
+        
+        # Calculate the start of the week (Monday)
         start_of_week = today - timedelta(days=today.weekday())
+        # Calculate the end of the week (Sunday)
         end_of_week = start_of_week + timedelta(days=6)
+        
+        logger.info(f"Week range: {start_of_week} to {end_of_week}")
         
         # Get or generate weekly report
         report = WeeklyReport.query.filter_by(
@@ -465,15 +472,40 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             
             breakeven_display += f" ({' / '.join(breakeven_detail)})"
         
+        # Format dates for better display (YYYY-MM-DD to Month DD, YYYY)
+        try:
+            formatted_start = report.week_start.strftime("%b %d, %Y")
+            formatted_end = report.week_end.strftime("%b %d, %Y")
+        except Exception as e:
+            logger.error(f"Error formatting dates: {e}")
+            formatted_start = str(report.week_start)
+            formatted_end = str(report.week_end)
+            
+        # Get user's current balance for display
+        current_balance = user.current_balance
+        
+        # Make sure balance is valid - fetch from database if needed
+        if current_balance is None:
+            # Try to refresh from the database
+            db.session.refresh(user)
+            current_balance = user.current_balance
+            
+            # If still None, use initial balance or default
+            if current_balance is None:
+                current_balance = user.initial_balance or 10000.0
+                logger.warning(f"User {user.id} has no current balance, using {current_balance}")
+        
+        # Format report with improved date display and balance information
         report_text = (
             f"📊 *Your Trading Week in Review* 📊\n"
-            f"📅 Week: {report.week_start} to {report.week_end}\n\n"
+            f"📅 Week: {formatted_start} to {formatted_end}\n\n"
             f"🎯 *Performance Summary*\n"
             f"Total Trades: {report.total_trades} trades\n"
             f"Wins: {report.wins} ✅ | Losses: {report.losses} ❌ | Breakeven: {breakeven_display}\n\n"
             f"Win Rate: {report.win_rate:.1f}%\n"
             f"{performance_bar}\n\n"
-            f"{pl_emoji} Net P/L: ${report.net_profit_loss:.2f}\n\n"
+            f"{pl_emoji} Net P/L: ${report.net_profit_loss:.2f}\n"
+            f"💰 Current Balance: ${current_balance:.2f}\n\n"
             f"📝 *Trading Notes*\n"
             f"{report.notes or 'No notes for this week.'}\n\n"
             f"Keep building those positive habits! 💪"
@@ -777,36 +809,63 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 clear_user_state(user.id)
                 return
                 
-            # Get all users
-            users = User.query.filter_by(registration_complete=True).all()
+            # Send a progress message 
+            await query.edit_message_text("Broadcasting message... Please wait.")
             
-            if not users:
-                await query.edit_message_text("No registered users found to send message to.")
+            # Get all users with a valid telegram_id
+            try:
+                users = User.query.filter(
+                    User.registration_complete == True, 
+                    User.telegram_id.isnot(None)
+                ).all()
+                
+                if not users:
+                    await query.edit_message_text("No registered users found to send message to.")
+                    clear_user_state(user.id)
+                    return
+            except Exception as e:
+                logger.error(f"Error fetching users for broadcast: {e}")
+                await query.edit_message_text(f"⚠️ Error fetching users: {str(e)}")
                 clear_user_state(user.id)
                 return
-                
-            # Send the message to all users
+            
+            # Send the message to all users using a proper try-except structure
             sent_count = 0
+            failed_count = 0
             try:
+                # Process each user in a batch (to avoid timeouts)
                 for recipient in users:
                     try:
-                        await context.bot.send_message(
-                            chat_id=recipient.telegram_id,
-                            text=f"📢 *ANNOUNCEMENT*\n\n{message}",
-                            parse_mode='Markdown'
-                        )
-                        sent_count += 1
+                        # Make sure we have a valid telegram_id (integer)
+                        if recipient.telegram_id and isinstance(recipient.telegram_id, (int, float)):
+                            await context.bot.send_message(
+                                chat_id=int(recipient.telegram_id),  # Ensure it's an integer
+                                text=f"📢 *ANNOUNCEMENT*\n\n{message}",
+                                parse_mode='Markdown'
+                            )
+                            sent_count += 1
+                            
+                            # Add a small delay to avoid rate limiting (every 5 messages)
+                            if sent_count % 5 == 0:
+                                await asyncio.sleep(0.5)
+                        else:
+                            failed_count += 1
+                            logger.warning(f"Skipped user {recipient.id} - invalid telegram_id: {recipient.telegram_id}")
                     except Exception as e:
+                        failed_count += 1
                         logger.error(f"Failed to send broadcast to user {recipient.id}: {e}")
                 
-                # Confirm to the admin
-                await query.edit_message_text(
-                    f"✅ Broadcast sent successfully to {sent_count} out of {len(users)} users."
-                )
+                # Confirm the results to the admin
+                success_msg = f"✅ Broadcast sent successfully to {sent_count} out of {len(users)} users."
+                if failed_count > 0:
+                    success_msg += f"\n\nℹ️ {failed_count} messages could not be delivered. See logs for details."
+                
+                await query.edit_message_text(success_msg)
+                
             except Exception as e:
                 logger.error(f"Error during broadcast: {e}")
                 await query.edit_message_text(
-                    f"⚠️ Error during broadcast: {e}"
+                    f"⚠️ Error during broadcast: {str(e)}\n\n{sent_count} messages were sent before the error occurred."
                 )
             
             # Clear the state
@@ -1402,10 +1461,27 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             if update.message.text.lower() == 'today':
                 trade_date = datetime.utcnow().date()
             else:
-                # Parse the date
-                trade_date = datetime.strptime(update.message.text, '%Y-%m-%d').date()
+                # Parse the date with better error handling
+                try:
+                    trade_date = datetime.strptime(update.message.text, '%Y-%m-%d').date()
+                except ValueError:
+                    # Try alternative date formats
+                    try:
+                        trade_date = datetime.strptime(update.message.text, '%m/%d/%Y').date()
+                    except ValueError:
+                        try:
+                            trade_date = datetime.strptime(update.message.text, '%d-%m-%Y').date()
+                        except ValueError:
+                            raise ValueError("Invalid date format")
             
-            # Store date in state data
+            # Validate the date is not in the future
+            if trade_date > datetime.utcnow().date():
+                await update.message.reply_text(
+                    "⚠️ The date cannot be in the future. Please enter today's date or a past date."
+                )
+                return
+                
+            # Store date in state data as ISO format string (YYYY-MM-DD)
             state_data['date'] = trade_date.strftime('%Y-%m-%d')
             set_user_state(user.id, JOURNAL_STATES.PAIR, state_data)
             
@@ -1556,10 +1632,28 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         
         db.session.add(trade)
         
-        # Update current balance
-        if profit_loss:
-            user.current_balance = (user.current_balance or user.initial_balance) + profit_loss
+        # Update current balance - ensure proper types and handle edge cases
+        try:
+            # Initialize current_balance if it hasn't been set yet
+            if user.current_balance is None and user.initial_balance is not None:
+                user.current_balance = user.initial_balance
+            elif user.current_balance is None and user.initial_balance is None:
+                # Set default values if both are None
+                user.initial_balance = 10000.0  # Default starting balance
+                user.current_balance = 10000.0
+                logger.warning(f"User {user.id} missing both initial and current balance, setting defaults")
             
+            # Add the profit/loss to the current balance
+            if profit_loss is not None:
+                user.current_balance += float(profit_loss)
+                logger.info(f"Updated user {user.id} balance: {user.current_balance} after P/L: {profit_loss}")
+            
+        except Exception as e:
+            logger.error(f"Error updating balance for user {user.id}: {str(e)}")
+            # Ensure we have valid balance values despite the error
+            if user.current_balance is None:
+                user.current_balance = user.initial_balance or 10000.0
+        
         db.session.commit()
         
         # Confirm and clear state
